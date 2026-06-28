@@ -1,0 +1,26 @@
+# requirements.txt — Boids Module 7
+#
+# The Processing sketch and HTML presentation require NO Python packages.
+# This file covers optional Python utilities only.
+#
+# Install with:
+#   pip install -r requirements.txt
+#
+# Python 3.8+ required.
+
+# Local HTTP server for serving presentation.html (avoids CORS issues in some browsers)
+# Built into Python stdlib — no extra package needed:
+#   python -m http.server 8080
+
+# Optional: auto-reload browser on file change during development
+watchdog>=3.0.0
+
+# Optional: generate PDF export of the presentation
+# (requires Chrome/Chromium installed separately)
+pyppeteer>=1.0.2
+
+# Optional: Jupyter notebook for algorithmic exploration of boid rules
+jupyter>=1.0.0
+notebook>=7.0.0
+matplotlib>=3.7.0
+numpy>=1.24.0

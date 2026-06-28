@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boids: Swarm Intelligence — Drone Swarm</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]})"></script>
+  <style>
+    :root {
+      --bg:        #07091a;
+      --surface:   #0d1228;
+      --surface2:  #131b35;
+      --surface3:  #1a2448;
+      --green:     #00ff88;
+      --cyan:      #00d4ff;
+      --yellow:    #ffd060;
+      --orange:    #ff7a40;
+      --purple:    #c084fc;
+      --text:      #e2e8f0;
+      --text-dim:  #94a3b8;
+      --border:    #1e3059;
+      --sep-col:   #ff5a5a;
+      --ali-col:   #00e5ff;
+      --coh-col:   #7cfc00;
+      --obs-col:   #ff9f43;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      overflow-x: hidden;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(7,9,26,.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem; height: 56px;
+    }
+    nav .brand { font-weight: 700; color: var(--green); letter-spacing: .5px; font-size: .95rem; }
+    nav ul { display: flex; gap: 1.8rem; list-style: none; }
+    nav a { color: var(--text-dim); text-decoration: none; font-size: .85rem; transition: color .2s; }
+    nav a:hover { color: var(--cyan); }
+
+    /* ─── HERO ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      background: radial-gradient(ellipse 80% 60% at 50% 30%,#0d2060 0%,transparent 70%);
+      position: relative; overflow: hidden;
+    }
+    .hero canvas#heroCanvas {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: .55; pointer-events: none;
+    }
+    .hero-content { position: relative; z-index: 1; max-width: 860px; }
+    .badge {
+      display: inline-block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--cyan);
+      font-size: .78rem; font-weight: 600; letter-spacing: 1.5px;
+      padding: .35rem 1rem; border-radius: 2rem;
+      text-transform: uppercase; margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4.2rem);
+      font-weight: 800; line-height: 1.1;
+      background: linear-gradient(135deg, #ffffff 0%, var(--cyan) 60%, var(--green) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; margin-bottom: 1.2rem;
+    }
+    .hero p {
+      font-size: 1.15rem; color: var(--text-dim); max-width: 640px; margin: 0 auto 2.5rem;
+    }
+    .scroll-hint {
+      font-size: .8rem; color: var(--text-dim); animation: bounce 2s infinite;
+      display: flex; flex-direction: column; align-items: center; gap: .4rem;
+    }
+    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(6px)} }
+    .scroll-hint svg { width: 20px; height: 20px; }
+
+    /* ─── SECTION CONTAINER ─── */
+    section {
+      padding: 5rem 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    section.full-bleed { max-width: none; padding: 5rem 4vw; }
+
+    .section-label {
+      font-size: .75rem; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--cyan);
+      margin-bottom: .6rem;
+    }
+    h2 {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      font-weight: 800; line-height: 1.2; margin-bottom: 1rem;
+    }
+    h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: .6rem; }
+    p { margin-bottom: 1rem; }
+
+    /* ─── RULE SECTIONS ─── */
+    .rule-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.5rem;
+      align-items: start;
+    }
+    .rule-grid.reverse { direction: rtl; }
+    .rule-grid.reverse > * { direction: ltr; }
+
+    .rule-info { display: flex; flex-direction: column; gap: 1.4rem; }
+
+    .rule-tag {
+      display: inline-flex; align-items: center; gap: .6rem;
+      padding: .3rem .9rem; border-radius: 2rem; font-size: .78rem;
+      font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    }
+    .tag-sep { background: #ff5a5a22; color: var(--sep-col); border: 1px solid #ff5a5a44; }
+    .tag-ali { background: #00e5ff22; color: var(--ali-col); border: 1px solid #00e5ff44; }
+    .tag-coh { background: #7cfc0022; color: var(--coh-col); border: 1px solid #7cfc0044; }
+
+    .rule-number {
+      font-size: 5rem; font-weight: 900; line-height: 1;
+      opacity: .08; position: absolute; top: -1rem; right: 0;
+      font-family: monospace;
+    }
+    .rule-header { position: relative; }
+
+    .formula-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 4px solid currentColor;
+      border-radius: .75rem;
+      padding: 1.4rem 1.6rem;
+      overflow-x: auto;
+    }
+    .formula-box.sep { color: var(--sep-col); }
+    .formula-box.ali { color: var(--ali-col); }
+    .formula-box.coh { color: var(--coh-col); }
+    .formula-label {
+      font-size: .7rem; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; opacity: .7; margin-bottom: .5rem;
+    }
+    .formula-box .katex-display { color: var(--text); margin: .2rem 0; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: .6rem 1.4rem; }
+    .legend-item { display: flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--text-dim); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    /* ─── CANVAS CARDS ─── */
+    .canvas-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      overflow: hidden;
+      position: relative;
+    }
+    .canvas-card canvas { display: block; width: 100%; }
+    .canvas-label {
+      position: absolute; top: .75rem; left: .9rem;
+      font-size: .72rem; font-weight: 700; letter-spacing: 1px;
+      text-transform: uppercase;
+      background: rgba(7,9,26,.7); padding: .25rem .65rem; border-radius: .4rem;
+      color: var(--text-dim);
+    }
+
+    /* ─── DIVIDER ─── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ─── FULL SIM ─── */
+    .sim-wrapper {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      overflow: hidden;
+      max-width: 1000px;
+      margin: 2rem auto 0;
+    }
+    #fullCanvas { display: block; width: 100%; }
+    .sim-controls {
+      display: flex; flex-wrap: wrap; gap: .8rem;
+      padding: 1rem 1.2rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .ctrl-btn {
+      display: flex; align-items: center; gap: .5rem;
+      padding: .4rem 1rem; border-radius: .5rem;
+      font-size: .82rem; font-weight: 600; cursor: pointer;
+      border: 1px solid transparent; transition: all .2s;
+      background: var(--surface3); color: var(--text-dim);
+    }
+    .ctrl-btn.active { border-color: currentColor; }
+    .ctrl-btn.sep { color: var(--sep-col); }
+    .ctrl-btn.ali { color: var(--ali-col); }
+    .ctrl-btn.coh { color: var(--coh-col); }
+    .ctrl-btn.noise { color: var(--yellow); }
+    .ctrl-btn.obs  { color: var(--obs-col); }
+    .ctrl-btn.mode-active { box-shadow: 0 0 0 2px currentColor; }
+    .ctrl-btn:hover { opacity: .85; }
+    .ctrl-indicator { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .ctrl-indicator.off { background: var(--surface3); border: 1px solid currentColor; }
+
+    .sim-hint {
+      text-align: center; font-size: .82rem; color: var(--text-dim);
+      padding: .5rem 1rem;
+    }
+
+    /* ─── DRONE SECTION ─── */
+    .drone-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem; margin-top: 2rem;
+    }
+    .drone-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: .75rem;
+      padding: 1.4rem;
+    }
+    .drone-card h4 { font-size: 1rem; font-weight: 700; margin-bottom: .5rem; color: var(--cyan); }
+    .drone-card p { font-size: .9rem; color: var(--text-dim); margin: 0; }
+
+    /* ─── PARAMS TABLE ─── */
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .88rem; }
+    th { background: var(--surface2); padding: .7rem 1rem; text-align: left; font-weight: 700;
+         border-bottom: 2px solid var(--border); }
+    td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
+    td code {
+      background: var(--surface3); padding: .15rem .4rem; border-radius: .3rem;
+      font-family: 'Courier New', monospace; font-size: .83rem; color: var(--cyan);
+    }
+    tr:hover td { background: var(--surface2); }
+
+    /* ─── FOOTER ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center; padding: 2.5rem;
+      color: var(--text-dim); font-size: .85rem;
+    }
+    footer a { color: var(--cyan); text-decoration: none; }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      .rule-grid { grid-template-columns: 1fr; }
+      .rule-grid.reverse { direction: ltr; }
+      nav ul { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     NAV
+════════════════════════════════════════════════════ -->
+<nav>
+  <span class="brand">BOIDS</span>
+  <ul>
+    <li><a href="#intro">Intro</a></li>
+    <li><a href="#separation">Separation</a></li>
+    <li><a href="#alignment">Alignment</a></li>
+    <li><a href="#cohesion">Cohesion</a></li>
+    <li><a href="#simulation">Simulation</a></li>
+    <li><a href="#drone-link">Drone Swarms</a></li>
+  </ul>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════
+     HERO
+════════════════════════════════════════════════════ -->
+<div class="hero">
+  <canvas id="heroCanvas"></canvas>
+  <div class="hero-content">
+    <div class="badge">Swarm Drones</div>
+    <h1>Boids:<br>Emergence of Swarm Intelligence</h1>
+    <p>
+      Three simple local rules — no central brain, no global map — produce the
+      rich, coordinated flocking behaviour seen in starlings, fish, and autonomous
+      drone swarms.
+    </p>
+    <div class="scroll-hint">
+      <span>Scroll to explore</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12l7 7 7-7"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     INTRO
+════════════════════════════════════════════════════ -->
+<section id="intro">
+  <div class="section-label">Background</div>
+  <h2>What are Boids?</h2>
+  <div class="rule-grid" style="gap:3rem">
+    <div>
+      <p>
+        <strong>Boids</strong> (Bird-oid Objects) is a model of flocking behaviour
+        created by Craig Reynolds in <strong>1986</strong>. Each agent follows only
+        three steering rules applied to its <em>local neighbourhood</em> — no agent
+        knows the global state of the flock.
+      </p>
+      <p>
+        The result is <strong>emergent complexity</strong>: realistic flocking,
+        splitting around obstacles, and regrouping, all arising from simple maths
+        and proximity checks alone.
+      </p>
+      <p>
+        Reynolds' key insight was that flocking is a <em>distributed computation</em>.
+        This maps directly onto modern multi-drone systems, where latency and
+        communication range prevent any single controller from commanding every vehicle.
+      </p>
+    </div>
+    <div>
+      <table>
+        <thead><tr><th>Parameter (from source)</th><th>Default value</th></tr></thead>
+        <tbody>
+          <tr><td>Max speed</td><td><code>2.1 × scale</code></td></tr>
+          <tr><td>Perception radius (friend)</td><td><code>60 × scale</code></td></tr>
+          <tr><td>Separation radius (crowd)</td><td><code>friendRadius / 1.3 ≈ 46</code></td></tr>
+          <tr><td>Obstacle avoidance radius</td><td><code>90 × scale</code></td></tr>
+          <tr><td>Cohesion radius</td><td><code>= friendRadius</code></td></tr>
+          <tr><td>Think interval</td><td><code>every 5 frames</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     RULE 1 — SEPARATION
+════════════════════════════════════════════════════ -->
+<section id="separation">
+  <div class="rule-grid">
+    <!-- Info -->
+    <div class="rule-info">
+      <div class="rule-header">
+        <span class="rule-number">01</span>
+        <div class="rule-tag tag-sep">Rule 1</div>
+        <h2 style="color:var(--sep-col)">Separation</h2>
+      </div>
+
+      <p>
+        Each boid steers <strong>away</strong> from any neighbour that is closer than
+        the <em>crowd radius</em> \(r_s\). Without this rule, the flock collapses into
+        a single point; with it, agents maintain comfortable spacing.
+      </p>
+
+      <div class="formula-box sep">
+        <div class="formula-label">Separation Steering Vector</div>
+        $$\vec{s}_i = \sum_{\substack{j \in \mathcal{N}_i \\ d_{ij} < r_s}} \frac{\vec{p}_i - \vec{p}_j}{\|\vec{p}_i - \vec{p}_j\|^2}$$
+      </div>
+
+      <div class="formula-box sep" style="border-left-width:2px">
+        <div class="formula-label">Where</div>
+        $$d_{ij} = \|\vec{p}_i - \vec{p}_j\|, \quad r_s = \frac{r_f}{1.3}$$
+      </div>
+
+      <p style="color:var(--text-dim); font-size:.9rem">
+        The <strong>inverse-square weighting</strong> \((1/d^2)\) makes very close
+        neighbours produce a much stronger repulsion than distant ones — the boid
+        urgently dodges whatever is right next to it while barely noticing agents
+        near the boundary.
+      </p>
+
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--sep-col)"></div>Focal boid</div>
+        <div class="legend-item"><div class="dot" style="background:#ff9999"></div>Neighbours in range</div>
+        <div class="legend-item"><div class="dot" style="background:#555"></div>Outside separation radius</div>
+        <div class="legend-item"><div class="dot" style="background:#fff; width:20px; height:4px; border-radius:2px"></div>Repulsion vector</div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-card">
+      <canvas id="sepCanvas" width="580" height="420"></canvas>
+      <div class="canvas-label" style="color:var(--sep-col)">SEPARATION DEMO — live</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     RULE 2 — ALIGNMENT
+════════════════════════════════════════════════════ -->
+<section id="alignment">
+  <div class="rule-grid reverse">
+    <!-- Canvas -->
+    <div class="canvas-card">
+      <canvas id="aliCanvas" width="580" height="420"></canvas>
+      <div class="canvas-label" style="color:var(--ali-col)">ALIGNMENT DEMO — live</div>
+    </div>
+
+    <!-- Info -->
+    <div class="rule-info">
+      <div class="rule-header">
+        <span class="rule-number">02</span>
+        <div class="rule-tag tag-ali">Rule 2</div>
+        <h2 style="color:var(--ali-col)">Alignment</h2>
+      </div>
+
+      <p>
+        Each boid steers to match the <strong>average heading</strong> of its
+        neighbours within the perception radius \(r_f\). Velocity contributions are
+        distance-weighted so closer neighbours have more influence.
+      </p>
+
+      <div class="formula-box ali">
+        <div class="formula-label">Alignment Steering Vector</div>
+        $$\vec{a}_i = \sum_{\substack{j \in \mathcal{N}_i \\ d_{ij} < r_f}} \frac{\hat{v}_j}{d_{ij}}$$
+      </div>
+
+      <div class="formula-box ali" style="border-left-width:2px">
+        <div class="formula-label">Normalised velocity & neighbour set</div>
+        $$\hat{v}_j = \frac{\vec{v}_j}{\|\vec{v}_j\|}, \quad \mathcal{N}_i = \{ j \neq i : d_{ij} < r_f \}$$
+      </div>
+
+      <p style="color:var(--text-dim); font-size:.9rem">
+        Dividing by \(d_{ij}\) instead of averaging gives nearer boids proportionally
+        more weight. This creates a local-first alignment that is robust to outliers
+        at the periphery — important for real swarms with patchy communication.
+      </p>
+
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--ali-col)"></div>Focal boid</div>
+        <div class="legend-item"><div class="dot" style="background:#55aacc"></div>Neighbours in range</div>
+        <div class="legend-item"><div class="dot" style="background:#fff; width:20px; height:4px; border-radius:2px"></div>Individual headings</div>
+        <div class="legend-item"><div class="dot" style="background:var(--ali-col); width:20px; height:4px; border-radius:2px"></div>Alignment target</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     RULE 3 — COHESION
+════════════════════════════════════════════════════ -->
+<section id="cohesion">
+  <div class="rule-grid">
+    <!-- Info -->
+    <div class="rule-info">
+      <div class="rule-header">
+        <span class="rule-number">03</span>
+        <div class="rule-tag tag-coh">Rule 3</div>
+        <h2 style="color:var(--coh-col)">Cohesion</h2>
+      </div>
+
+      <p>
+        Each boid steers <strong>toward the centre of mass</strong> of its
+        neighbourhood, keeping the flock together as a loose whole. Without
+        cohesion, separation and noise alone would scatter agents indefinitely.
+      </p>
+
+      <div class="formula-box coh">
+        <div class="formula-label">Centre of Mass</div>
+        $$\bar{\vec{p}}_i = \frac{1}{|\mathcal{N}_i|} \sum_{\substack{j \in \mathcal{N}_i \\ d_{ij} < r_c}} \vec{p}_j$$
+      </div>
+
+      <div class="formula-box coh">
+        <div class="formula-label">Cohesion Steering Vector (from source)</div>
+        $$\vec{c}_i = (\bar{\vec{p}}_i - \vec{p}_i)\Big|_{\|\cdot\|=0.05}$$
+      </div>
+
+      <div class="formula-box coh" style="border-left-width:2px">
+        <div class="formula-label">Note</div>
+        $$r_c = r_f = 60 \times \text{scale} \quad \text{(cohesion uses friend radius)}$$
+      </div>
+
+      <p style="color:var(--text-dim); font-size:.9rem">
+        The magnitude is clamped to <code>0.05</code> (<code>setMag(0.05)</code> in the
+        source) so cohesion is a gentle pull — strong enough to resist scatter but
+        soft enough to let separation win at short range, preventing pile-ups.
+      </p>
+
+      <div class="legend">
+        <div class="legend-item"><div class="dot" style="background:var(--coh-col)"></div>Focal boid</div>
+        <div class="legend-item"><div class="dot" style="background:#aadd88"></div>Neighbours in range</div>
+        <div class="legend-item"><div class="dot" style="background:var(--yellow)"></div>Centre of mass</div>
+        <div class="legend-item"><div class="dot" style="background:var(--coh-col); width:20px; height:4px; border-radius:2px"></div>Cohesion pull vector</div>
+      </div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-card">
+      <canvas id="cohCanvas" width="580" height="420"></canvas>
+      <div class="canvas-label" style="color:var(--coh-col)">COHESION DEMO — live</div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     FULL SIMULATION
+════════════════════════════════════════════════════ -->
+<section id="simulation" class="full-bleed">
+  <div style="max-width:1000px;margin:0 auto">
+    <div class="section-label">Interactive Simulation</div>
+    <h2>All Three Rules — Combined</h2>
+    <p style="color:var(--text-dim)">
+      Click the canvas to add boids or place obstacles. Toggle each rule on/off to observe
+      how removing a single force changes the emergent behaviour.
+    </p>
+  </div>
+
+  <div class="sim-wrapper">
+    <canvas id="fullCanvas" width="1000" height="560"></canvas>
+    <div class="sim-hint" id="simHint">Click canvas to <strong id="hintAction" style="color:var(--green)">add boids</strong></div>
+    <div class="sim-controls">
+      <!-- Rule toggles -->
+      <button class="ctrl-btn sep active" id="btnSep" onclick="toggleRule('separation')">
+        <div class="ctrl-indicator" id="indSep"></div> Separation
+      </button>
+      <button class="ctrl-btn ali active" id="btnAli" onclick="toggleRule('alignment')">
+        <div class="ctrl-indicator" id="indAli"></div> Alignment
+      </button>
+      <button class="ctrl-btn coh active" id="btnCoh" onclick="toggleRule('cohesion')">
+        <div class="ctrl-indicator" id="indCoh"></div> Cohesion
+      </button>
+      <button class="ctrl-btn noise active" id="btnNoise" onclick="toggleRule('noise')">
+        <div class="ctrl-indicator" id="indNoise"></div> Noise
+      </button>
+      <!-- Separator -->
+      <div style="width:1px;background:var(--border);align-self:stretch;margin:0 .2rem"></div>
+      <!-- Click-mode toggle (single button, label swaps) -->
+      <button class="ctrl-btn obs" id="btnMode" onclick="toggleMode()">
+        ✦ <span id="modeLabel">Place Obstacle</span>
+      </button>
+      <!-- Utility -->
+      <button class="ctrl-btn" style="color:var(--text-dim)" onclick="spawnBoids(30)">Spawn 30</button>
+      <button class="ctrl-btn" style="color:var(--text-dim)" onclick="clearBoids()">Clear Boids</button>
+      <button class="ctrl-btn" style="color:var(--obs-col);opacity:.7" onclick="clearAvoids()">Clear Obstacles</button>
+      <span style="margin-left:auto;font-size:.82rem;color:var(--text-dim);align-self:center" id="boidCount">0 boids</span>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     DRONE SWARM CONNECTION
+════════════════════════════════════════════════════ -->
+<section id="drone-link">
+  <div class="section-label">Application</div>
+  <h2>From Boids to Drone Swarms</h2>
+  <p style="color:var(--text-dim); max-width:700px">
+    Boid rules translate directly into drone swarm controllers. Each rule maps
+    to a physical requirement already present in multi-UAV operations.
+  </p>
+
+  <div class="drone-grid">
+    <div class="drone-card">
+      <h4 style="color:var(--sep-col)">Separation → Collision Avoidance</h4>
+      <p>Minimum safe separation between drones is enforced by the same
+         inverse-square repulsion used in the boid model.
+         In practice this is augmented by ADS-B/UWB ranging and hard
+         physical limits on manoeuvre rates.</p>
+    </div>
+    <div class="drone-card">
+      <h4 style="color:var(--ali-col)">Alignment → Formation Holding</h4>
+      <p>Drones in a formation match bearing and airspeed with neighbours.
+         IMU/GNSS heading fusion provides the velocity vector equivalent
+         to the boid's <code>move</code> variable, broadcast over MAVLink.</p>
+    </div>
+    <div class="drone-card">
+      <h4 style="color:var(--coh-col)">Cohesion → Flock Integrity</h4>
+      <p>Gentle centripetal acceleration keeps the swarm from dispersing
+         over a wide area. In real systems this is tuned to the comms range —
+         drones at the edge of reliable link budget get a stronger pull-back.</p>
+    </div>
+    <div class="drone-card">
+      <h4 style="color:var(--purple)">Obstacle Avoidance → Geofence / Terrain</h4>
+      <p>The <code>Avoid</code> objects in the Processing sketch model static
+         obstacles. Drone swarms extend this with live 3-D point-cloud data
+         from onboard LiDAR/depth cameras for dynamic obstacle fields.</p>
+    </div>
+    <div class="drone-card">
+      <h4 style="color:var(--yellow)">Noise → Resilience &amp; Exploration</h4>
+      <p>The random perturbation term prevents lock-in to degenerate
+         configurations (all drones flying in a single line) and lets the
+         swarm re-explore after an obstacle splits the flock.</p>
+    </div>
+    <div class="drone-card">
+      <h4 style="color:var(--cyan)">No Central Controller</h4>
+      <p>The boid model is inherently <em>decentralised</em> — exactly the
+         failure-tolerant architecture required for GPS-denied or
+         communication-degraded environments in real tactical swarms.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- ═══════════════════════════════════════════════════
+     REFERENCE TABLE
+════════════════════════════════════════════════════ -->
+<section>
+  <div class="section-label">Quick Reference</div>
+  <h2>Rule Summary</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Rule</th><th>Goal</th><th>Radius used</th><th>Weight (source)</th>
+        <th>Drone analogy</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong style="color:var(--sep-col)">Separation</strong></td>
+        <td>Avoid crowding neighbours</td>
+        <td><code>crowdRadius</code> ≈ 46</td>
+        <td>× 1</td>
+        <td>Collision avoidance envelope</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--ali-col)">Alignment</strong></td>
+        <td>Match neighbour headings</td>
+        <td><code>friendRadius</code> = 60</td>
+        <td>× 1</td>
+        <td>Formation / cooperative navigation</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--coh-col)">Cohesion</strong></td>
+        <td>Steer toward local centre of mass</td>
+        <td><code>coheseRadius</code> = 60</td>
+        <td>× 1 (mag capped 0.05)</td>
+        <td>Flock integrity / comms range management</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--orange)">Obstacle Avoidance</strong></td>
+        <td>Avoid static obstacles</td>
+        <td><code>avoidRadius</code> = 90</td>
+        <td>× 3 (strongest)</td>
+        <td>Geofence / terrain following</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--yellow)">Noise</strong></td>
+        <td>Random perturbation</td>
+        <td>N/A (global)</td>
+        <td>× 0.1 (weakest)</td>
+        <td>Robustness / exploration</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  <p>
+    Based on Craig W. Reynolds, "Flocks, Herds, and Schools: A Distributed Behavioral Model,"
+    <em>SIGGRAPH '87</em> —
+    <a href="https://www.red3d.com/cwr/boids/" target="_blank">red3d.com/cwr/boids</a>
+  </p>
+  <p style="margin-top:.5rem">
+    Source repo: <a href="https://github.com/jackaperkins/boids" target="_blank">github.com/jackaperkins/boids</a>
+    · Boids in Swarm Drones
+  </p>
+</footer>
+
+
+<!-- ═══════════════════════════════════════════════════
+     JAVASCRIPT — ALL SIMULATIONS
+════════════════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────
+// Shared utilities
+// ─────────────────────────────────────────
+function dist(a, b) { const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+function norm(v) { const m=Math.sqrt(v.x*v.x+v.y*v.y); return m>0?{x:v.x/m,y:v.y/m}:{x:0,y:0}; }
+function limit(v, max) { const m=Math.sqrt(v.x*v.x+v.y*v.y); return m>max?{x:v.x/m*max,y:v.y/m*max}:v; }
+function add(a,b) { return {x:a.x+b.x, y:a.y+b.y}; }
+function sub(a,b) { return {x:a.x-b.x, y:a.y-b.y}; }
+function scale(v,s) { return {x:v.x*s, y:v.y*s}; }
+function mag(v) { return Math.sqrt(v.x*v.x+v.y*v.y); }
+function angle(v) { return Math.atan2(v.y, v.x); }
+
+function drawArrow(ctx, x1, y1, x2, y2, color, width=2, headLen=10) {
+  const dx=x2-x1, dy=y2-y1;
+  const len=Math.sqrt(dx*dx+dy*dy);
+  if(len<1) return;
+  const a=Math.atan2(dy,dx);
+  ctx.save();
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=width;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-headLen*Math.cos(a-Math.PI/5.5), y2-headLen*Math.sin(a-Math.PI/5.5));
+  ctx.lineTo(x2-headLen*Math.cos(a+Math.PI/5.5), y2-headLen*Math.sin(a+Math.PI/5.5));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawBoid(ctx, x, y, vx, vy, color, size=9) {
+  const a=Math.atan2(vy,vx);
+  ctx.save();
+  ctx.translate(x,y); ctx.rotate(a);
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(size*1.6,0);
+  ctx.lineTo(-size*0.7, size*0.7);
+  ctx.lineTo(-size*0.7,-size*0.7);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawCircle(ctx, x, y, r, color, dashed=false) {
+  ctx.save();
+  ctx.strokeStyle=color; ctx.lineWidth=1; ctx.globalAlpha=.25;
+  if(dashed) ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+}
+
+// ─────────────────────────────────────────
+// Generic Boid class
+// ─────────────────────────────────────────
+class Boid {
+  constructor(x,y,w,h) {
+    this.pos={x,y};
+    this.w=w; this.h=h;
+    const spd=1.2+Math.random()*1.2;
+    const a=Math.random()*Math.PI*2;
+    this.vel={x:Math.cos(a)*spd, y:Math.sin(a)*spd};
+    this.hue=Math.random()*360;
+  }
+  wrap() {
+    this.pos.x=((this.pos.x%this.w)+this.w)%this.w;
+    this.pos.y=((this.pos.y%this.h)+this.h)%this.h;
+  }
+  separation(boids, radius) {
+    let sx=0,sy=0;
+    for(const o of boids){
+      if(o===this) continue;
+      const d=dist(this.pos,o.pos);
+      if(d>0&&d<radius){
+        const dx=this.pos.x-o.pos.x, dy=this.pos.y-o.pos.y;
+        sx+=dx/(d*d); sy+=dy/(d*d);
+      }
+    }
+    return {x:sx,y:sy};
+  }
+  alignment(boids, radius) {
+    let ax=0,ay=0;
+    for(const o of boids){
+      if(o===this) continue;
+      const d=dist(this.pos,o.pos);
+      if(d>0&&d<radius){
+        const n=norm(o.vel);
+        ax+=n.x/d; ay+=n.y/d;
+      }
+    }
+    return {x:ax,y:ay};
+  }
+  cohesion(boids, radius) {
+    let cx=0,cy=0,count=0;
+    for(const o of boids){
+      if(o===this) continue;
+      const d=dist(this.pos,o.pos);
+      if(d>0&&d<radius){ cx+=o.pos.x; cy+=o.pos.y; count++; }
+    }
+    if(count>0){
+      cx/=count; cy/=count;
+      const desired=sub({x:cx,y:cy},this.pos);
+      const n=norm(desired);
+      return {x:n.x*.05, y:n.y*.05};
+    }
+    return {x:0,y:0};
+  }
+  avoidObstacles(avoids, radius) {
+    let sx=0,sy=0;
+    for(const o of avoids){
+      const d=dist(this.pos,o);
+      if(d>0&&d<radius){
+        const dx=this.pos.x-o.x, dy=this.pos.y-o.y;
+        sx+=dx/(d*d); sy+=dy/(d*d);
+      }
+    }
+    return {x:sx,y:sy};
+  }
+  update(boids, rules, params, avoids=[]) {
+    let ax=0,ay=0;
+    if(rules.separation){ const s=this.separation(boids,params.sepR); ax+=s.x*params.sepW; ay+=s.y*params.sepW; }
+    if(rules.alignment){  const a=this.alignment(boids,params.aliR);  ax+=a.x*params.aliW; ay+=a.y*params.aliW; }
+    if(rules.cohesion){   const c=this.cohesion(boids,params.cohR);   ax+=c.x*params.cohW; ay+=c.y*params.cohW; }
+    if(avoids.length){    const o=this.avoidObstacles(avoids,params.avoidR); ax+=o.x*params.avoidW; ay+=o.y*params.avoidW; }
+    if(rules.noise){ ax+=(Math.random()-.5)*.15; ay+=(Math.random()-.5)*.15; }
+    this.vel=add(this.vel,{x:ax,y:ay});
+    this.vel=limit(this.vel,params.maxSpeed);
+    const m=mag(this.vel);
+    if(m<0.5){ const n=norm(this.vel); this.vel={x:n.x*.5,y:n.y*.5}; }
+    this.pos=add(this.pos,this.vel);
+    this.wrap();
+  }
+}
+
+// ─────────────────────────────────────────
+// HERO SIMULATION (background)
+// ─────────────────────────────────────────
+(function(){
+  const canvas=document.getElementById('heroCanvas');
+  function resize(){ canvas.width=canvas.offsetWidth; canvas.height=canvas.offsetHeight; }
+  window.addEventListener('resize',resize); resize();
+
+  const boids=[];
+  const params={maxSpeed:1.8, sepR:50, aliR:80, cohR:80, sepW:1, aliW:1, cohW:1};
+  const rules={separation:true,alignment:true,cohesion:true,noise:true};
+
+  for(let i=0;i<80;i++){
+    boids.push(new Boid(
+      Math.random()*canvas.width,
+      Math.random()*canvas.height,
+      canvas.width, canvas.height
+    ));
+  }
+
+  function loop(){
+    const w=canvas.offsetWidth, h=canvas.offsetHeight;
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='rgba(7,9,26,0.18)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    for(const b of boids){
+      b.w=canvas.width; b.h=canvas.height;
+      b.update(boids,rules,params);
+      drawBoid(ctx,b.pos.x,b.pos.y,b.vel.x,b.vel.y,`hsla(${b.hue},60%,65%,0.7)`,7);
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ─────────────────────────────────────────
+// SEPARATION DEMO
+// ─────────────────────────────────────────
+(function(){
+  const canvas=document.getElementById('sepCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const SEP_R=70, MAX_SPD=1.5;
+  const boids=[];
+
+  // Start them clustered in centre
+  for(let i=0;i<18;i++){
+    const b=new Boid(W/2+(Math.random()-.5)*60, H/2+(Math.random()-.5)*60, W, H);
+    b.vel={x:(Math.random()-.5)*0.5, y:(Math.random()-.5)*0.5};
+    boids.push(b);
+  }
+
+  const params={maxSpeed:MAX_SPD, sepR:SEP_R, aliR:0, cohR:0, sepW:1.2, aliW:0, cohW:0};
+  const rules={separation:true, alignment:false, cohesion:false, noise:true};
+
+  // Periodically re-cluster
+  let resetTimer=0;
+  function resetCluster(){
+    for(const b of boids){
+      b.pos={x:W/2+(Math.random()-.5)*50, y:H/2+(Math.random()-.5)*50};
+      b.vel={x:(Math.random()-.5)*0.4, y:(Math.random()-.5)*0.4};
+    }
+  }
+
+  function loop(){
+    resetTimer++;
+    if(resetTimer>320){ resetTimer=0; resetCluster(); }
+
+    ctx.fillStyle='rgba(7,9,26,0.25)';
+    ctx.fillRect(0,0,W,H);
+
+    // Pick focal boid (index 0)
+    const focal=boids[0];
+
+    // Draw separation radius ring
+    drawCircle(ctx,focal.pos.x,focal.pos.y,SEP_R,'#ff5a5a',true);
+
+    for(let i=0;i<boids.length;i++){
+      const b=boids[i];
+      b.update(boids,rules,params);
+    }
+
+    // Draw force arrows on focal boid
+    for(const o of boids){
+      if(o===focal) continue;
+      const d=dist(focal.pos,o.pos);
+      if(d>0&&d<SEP_R){
+        const dx=focal.pos.x-o.pos.x, dy=focal.pos.y-o.pos.y;
+        const force=1/(d*d);
+        const nx=dx/d, ny=dy/d;
+        const arrowLen=Math.min(force*2000,40);
+        const alpha=Math.min(1,0.3+arrowLen/40);
+        drawArrow(ctx,
+          focal.pos.x, focal.pos.y,
+          focal.pos.x+nx*arrowLen, focal.pos.y+ny*arrowLen,
+          `rgba(255,90,90,${alpha})`,1.5,7);
+        // Draw line to neighbour
+        ctx.save();
+        ctx.strokeStyle='rgba(255,80,80,0.2)';
+        ctx.lineWidth=1; ctx.setLineDash([3,4]);
+        ctx.beginPath();
+        ctx.moveTo(focal.pos.x,focal.pos.y);
+        ctx.lineTo(o.pos.x,o.pos.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // Draw boids
+    for(let i=0;i<boids.length;i++){
+      const b=boids[i];
+      const d=dist(focal.pos,b.pos);
+      let color;
+      if(b===focal) color='#ffffff';
+      else if(d<SEP_R) color='#ff9999';
+      else color='#445566';
+      drawBoid(ctx,b.pos.x,b.pos.y,b.vel.x,b.vel.y,color,b===focal?11:8);
+    }
+
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ─────────────────────────────────────────
+// ALIGNMENT DEMO
+// ─────────────────────────────────────────
+(function(){
+  const canvas=document.getElementById('aliCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const ALI_R=85, MAX_SPD=1.6;
+  const boids=[];
+
+  for(let i=0;i<20;i++){
+    const b=new Boid(
+      60+Math.random()*(W-120),
+      60+Math.random()*(H-120),
+      W, H
+    );
+    boids.push(b);
+  }
+
+  const params={maxSpeed:MAX_SPD, sepR:0, aliR:ALI_R, cohR:0, sepW:0, aliW:0.8, cohW:0};
+  const rules={separation:false, alignment:true, cohesion:false, noise:true};
+
+  // Add gentle noise periodically to disrupt alignment
+  let chaosTimer=0;
+  function addChaos(){
+    for(const b of boids){
+      const a=Math.random()*Math.PI*2;
+      b.vel={x:Math.cos(a)*1.5, y:Math.sin(a)*1.5};
+    }
+  }
+
+  function loop(){
+    chaosTimer++;
+    if(chaosTimer>380){ chaosTimer=0; addChaos(); }
+
+    ctx.fillStyle='rgba(7,9,26,0.22)';
+    ctx.fillRect(0,0,W,H);
+
+    for(const b of boids){ b.update(boids,rules,params); }
+
+    const focal=boids[0];
+
+    // Perception radius
+    drawCircle(ctx,focal.pos.x,focal.pos.y,ALI_R,'#00e5ff',true);
+
+    // Compute weighted average direction
+    let avgX=0, avgY=0;
+    let count=0;
+    for(const o of boids){
+      if(o===focal) continue;
+      const d=dist(focal.pos,o.pos);
+      if(d>0&&d<ALI_R){
+        const n=norm(o.vel);
+        avgX+=n.x/d; avgY+=n.y/d;
+        count++;
+      }
+    }
+
+    // Draw individual heading arrows
+    for(const o of boids){
+      if(o===focal) continue;
+      const d=dist(focal.pos,o.pos);
+      const inRange=d<ALI_R;
+      const n=norm(o.vel);
+      const color=inRange?'rgba(100,220,255,0.7)':'rgba(100,120,140,0.4)';
+      drawArrow(ctx,o.pos.x,o.pos.y,o.pos.x+n.x*20,o.pos.y+n.y*20,color,1.5,6);
+      drawBoid(ctx,o.pos.x,o.pos.y,o.vel.x,o.vel.y,inRange?'#55aacc':'#334455',8);
+    }
+
+    // Draw average direction from focal
+    if(count>0){
+      const am=mag({x:avgX,y:avgY});
+      const anorm=am>0?{x:avgX/am,y:avgY/am}:{x:0,y:0};
+      drawArrow(ctx,
+        focal.pos.x,focal.pos.y,
+        focal.pos.x+anorm.x*50,focal.pos.y+anorm.y*50,
+        '#00e5ff',3,12);
+    }
+
+    // Focal
+    drawBoid(ctx,focal.pos.x,focal.pos.y,focal.vel.x,focal.vel.y,'#ffffff',12);
+
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ─────────────────────────────────────────
+// COHESION DEMO
+// ─────────────────────────────────────────
+(function(){
+  const canvas=document.getElementById('cohCanvas');
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const COH_R=120, MAX_SPD=1.4;
+  const boids=[];
+
+  for(let i=0;i<18;i++){
+    const b=new Boid(
+      80+Math.random()*(W-160),
+      80+Math.random()*(H-160),
+      W,H
+    );
+    boids.push(b);
+  }
+
+  const params={maxSpeed:MAX_SPD, sepR:0, aliR:0, cohR:COH_R, sepW:0, aliW:0, cohW:1};
+  const rules={separation:false, alignment:false, cohesion:true, noise:true};
+
+  let scatterTimer=0;
+  function scatter(){
+    for(const b of boids){
+      b.pos={x:50+Math.random()*(W-100), y:50+Math.random()*(H-100)};
+      b.vel={x:(Math.random()-.5)*.8, y:(Math.random()-.5)*.8};
+    }
+  }
+
+  function loop(){
+    scatterTimer++;
+    if(scatterTimer>340){ scatterTimer=0; scatter(); }
+
+    ctx.fillStyle='rgba(7,9,26,0.22)';
+    ctx.fillRect(0,0,W,H);
+
+    for(const b of boids){ b.update(boids,rules,params); }
+
+    const focal=boids[0];
+
+    // Cohesion radius
+    drawCircle(ctx,focal.pos.x,focal.pos.y,COH_R,'#7cfc00',true);
+
+    // Compute centre of mass (neighbours only)
+    let cx=0,cy=0,count=0;
+    for(const o of boids){
+      if(o===focal) continue;
+      const d=dist(focal.pos,o.pos);
+      if(d>0&&d<COH_R){ cx+=o.pos.x; cy+=o.pos.y; count++; }
+    }
+
+    // Draw non-focal boids
+    for(const o of boids){
+      if(o===focal) continue;
+      const d=dist(focal.pos,o.pos);
+      const inRange=d<COH_R;
+      drawBoid(ctx,o.pos.x,o.pos.y,o.vel.x,o.vel.y,inRange?'#aadd88':'#334455',8);
+    }
+
+    if(count>0){
+      cx/=count; cy/=count;
+
+      // Draw lines from neighbours to centre
+      for(const o of boids){
+        if(o===focal) continue;
+        const d=dist(focal.pos,o.pos);
+        if(d<COH_R){
+          ctx.save();
+          ctx.strokeStyle='rgba(124,252,0,0.1)';
+          ctx.lineWidth=1; ctx.setLineDash([2,5]);
+          ctx.beginPath(); ctx.moveTo(o.pos.x,o.pos.y); ctx.lineTo(cx,cy); ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // Centre of mass dot
+      ctx.save();
+      ctx.fillStyle='#ffd060';
+      ctx.shadowColor='#ffd060'; ctx.shadowBlur=12;
+      ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+
+      // Cohesion arrow from focal to centre
+      drawArrow(ctx,focal.pos.x,focal.pos.y,
+        focal.pos.x+(cx-focal.pos.x)*0.6,
+        focal.pos.y+(cy-focal.pos.y)*0.6,
+        '#7cfc00',2.5,10);
+
+      // Label
+      ctx.save();
+      ctx.fillStyle='rgba(255,208,96,0.85)';
+      ctx.font='bold 11px monospace';
+      ctx.fillText('centre of mass',cx+10,cy-10);
+      ctx.restore();
+    }
+
+    // Focal
+    drawBoid(ctx,focal.pos.x,focal.pos.y,focal.vel.x,focal.vel.y,'#ffffff',12);
+
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ─────────────────────────────────────────
+// FULL SIMULATION
+// ─────────────────────────────────────────
+const fullCanvas=document.getElementById('fullCanvas');
+const fullCtx=fullCanvas.getContext('2d');
+const FW=fullCanvas.width, FH=fullCanvas.height;
+
+let fullBoids=[];
+let fullAvoids=[];   // array of {x,y} positions
+let clickMode='boids'; // 'boids' | 'obstacles'
+
+const fullRules={separation:true, alignment:true, cohesion:true, noise:true};
+const fullParams={
+  maxSpeed:2.1,
+  sepR:46,  aliR:60,  cohR:60,
+  sepW:1,   aliW:1,   cohW:1,
+  avoidR:90, avoidW:3   // matches Processing: avoidRadius=90, mult(3)
+};
+
+// ── Utility ──────────────────────────────
+function spawnBoids(n){
+  for(let i=0;i<n;i++){
+    fullBoids.push(new Boid(Math.random()*FW, Math.random()*FH, FW, FH));
+  }
+  updateCount();
+}
+function clearBoids(){ fullBoids=[]; updateCount(); }
+function clearAvoids(){ fullAvoids=[]; }
+function updateCount(){
+  document.getElementById('boidCount').textContent=
+    `${fullBoids.length} boid${fullBoids.length!==1?'s':''}`+
+    (fullAvoids.length ? `  ·  ${fullAvoids.length} obstacle${fullAvoids.length!==1?'s':''}` : '');
+}
+
+// ── Rule toggles ─────────────────────────
+function toggleRule(rule){
+  fullRules[rule]=!fullRules[rule];
+  const idMap={separation:'Sep',alignment:'Ali',cohesion:'Coh',noise:'Noise'};
+  const ind=document.getElementById('ind'+idMap[rule]);
+  if(ind) ind.classList.toggle('off', !fullRules[rule]);
+}
+
+// ── Click-mode toggle ─────────────────────
+function toggleMode(){
+  clickMode = clickMode==='boids' ? 'obstacles' : 'boids';
+  const btn=document.getElementById('btnMode');
+  const lbl=document.getElementById('modeLabel');
+  const hint=document.getElementById('hintAction');
+  if(clickMode==='obstacles'){
+    lbl.textContent='Back to Add Boids';
+    btn.classList.add('mode-active');
+    hint.style.color='var(--obs-col)';
+    hint.textContent='place obstacle';
+    fullCanvas.style.cursor='crosshair';
+  } else {
+    lbl.textContent='Place Obstacle';
+    btn.classList.remove('mode-active');
+    hint.style.color='var(--green)';
+    hint.textContent='add boids';
+    fullCanvas.style.cursor='default';
+  }
+}
+
+// ── Canvas click ──────────────────────────
+fullCanvas.addEventListener('click', function(e){
+  const rect=fullCanvas.getBoundingClientRect();
+  const scaleX=FW/rect.width, scaleY=FH/rect.height;
+  const x=(e.clientX-rect.left)*scaleX;
+  const y=(e.clientY-rect.top)*scaleY;
+  if(clickMode==='obstacles'){
+    fullAvoids.push({x,y});
+    updateCount();
+  } else {
+    for(let i=0;i<5;i++){
+      fullBoids.push(new Boid(x+(Math.random()-.5)*20, y+(Math.random()-.5)*20, FW, FH));
+    }
+    updateCount();
+  }
+});
+
+// ── Draw an obstacle ─────────────────────
+function drawObstacle(ctx, x, y){
+  ctx.save();
+  // Glow
+  ctx.shadowColor='#ff9f43';
+  ctx.shadowBlur=18;
+  ctx.fillStyle='#ff9f43';
+  ctx.beginPath();
+  ctx.arc(x,y,7,0,Math.PI*2);
+  ctx.fill();
+  // Inner bright dot
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#fff4e0';
+  ctx.beginPath();
+  ctx.arc(x,y,3,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ── Draw avoidance radius ring (faint) ───
+function drawAvoidRing(ctx, x, y, r){
+  ctx.save();
+  ctx.strokeStyle='rgba(255,159,67,0.15)';
+  ctx.lineWidth=1;
+  ctx.setLineDash([3,5]);
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ── Main loop ─────────────────────────────
+function fullLoop(){
+  fullCtx.fillStyle='rgba(7,9,26,0.3)';
+  fullCtx.fillRect(0,0,FW,FH);
+
+  // Draw avoidance rings (behind boids)
+  for(const av of fullAvoids){
+    drawAvoidRing(fullCtx, av.x, av.y, fullParams.avoidR);
+  }
+
+  // Update & draw boids
+  for(const b of fullBoids){
+    b.update(fullBoids, fullRules, fullParams, fullAvoids);
+    const c=`hsl(${b.hue},70%,60%)`;
+    drawBoid(fullCtx,b.pos.x,b.pos.y,b.vel.x,b.vel.y,c,8);
+  }
+
+  // Draw obstacles on top
+  for(const av of fullAvoids){
+    drawObstacle(fullCtx, av.x, av.y);
+  }
+
+  requestAnimationFrame(fullLoop);
+}
+
+spawnBoids(40);
+fullLoop();
+</script>
+
+</body>
+</html>
